@@ -1,0 +1,55 @@
+name: build
+
+on:
+  push:
+    branches: [ main ]
+    tags:     [ 'v*' ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: setup dotnet
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '6.0.x'
+
+      - name: fetch unity stubs
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path libs | Out-Null
+          $urls = @{
+            "UnityEngine.dll"              = "https://unity.bepinex.dev/libraries/2022.3.21f1/UnityEngine.dll"
+            "UnityEngine.CoreModule.dll"   = "https://unity.bepinex.dev/libraries/2022.3.21f1/UnityEngine.CoreModule.dll"
+            "UnityEngine.XRModule.dll"     = "https://unity.bepinex.dev/libraries/2022.3.21f1/UnityEngine.XRModule.dll"
+            "UnityEngine.InputModule.dll"  = "https://unity.bepinex.dev/libraries/2022.3.21f1/UnityEngine.InputModule.dll"
+            "UnityEngine.PhysicsModule.dll"= "https://unity.bepinex.dev/libraries/2022.3.21f1/UnityEngine.PhysicsModule.dll"
+          }
+          foreach ($k in $urls.Keys) {
+            Invoke-WebRequest -Uri $urls[$k] -OutFile "libs/$k"
+          }
+
+      - name: fetch MelonLoader
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://github.com/LavaGang/MelonLoader/releases/download/v0.6.6/MelonLoader.x64.zip" -OutFile ml.zip
+          Expand-Archive ml.zip -DestinationPath ml
+          Copy-Item ml/MelonLoader/net6/MelonLoader.dll libs/MelonLoader.dll
+
+      - name: build
+        run: dotnet build -c Release
+
+      - name: upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OllieGillaMenu
+          path: bin/Release/OllieGillaMenu.dll
+
+      - name: release on tag
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: bin/Release/OllieGillaMenu.dll
